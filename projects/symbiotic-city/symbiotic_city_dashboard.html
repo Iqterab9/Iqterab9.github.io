@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symbiotic City Dashboard</title>
+    
+    <!-- LeafletJS CSS for the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        /* Basic Styling */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f0f2f5; display: flex; flex-direction: column; height: 100vh; }
+        header { background-color: #fff; padding: 10px 20px; border-bottom: 1px solid #ddd; text-align: center; }
+        header h1 { margin: 0; font-size: 1.5em; color: #333; }
+        header p { margin: 5px 0 0; color: #666; }
+        main { display: flex; flex: 1; overflow: hidden; }
+        #map { width: 70%; height: 100%; }
+        #control-panel { width: 30%; background-color: #fff; padding: 20px; overflow-y: auto; border-left: 1px solid #ddd; display: flex; flex-direction: column; }
+        
+        /* Control Panel Sections */
+        .panel-section { margin-bottom: 20px; }
+        .panel-section h3 { margin: 0 0 10px; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; color: #333; }
+        
+        /* Impact Dashboard */
+        #impact-dashboard .metric { background-color: #e8f5e9; border-left: 5px solid #4CAF50; padding: 15px; margin-bottom: 10px; }
+        #impact-dashboard .metric h4 { margin: 0 0 5px; }
+        #impact-dashboard .metric p { margin: 0; font-size: 1.8em; font-weight: bold; color: #2e7d32; }
+
+        /* Marketplace Log */
+        #marketplace-log ul { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
+        #marketplace-log li { background-color: #f1f8e9; padding: 10px; border-radius: 4px; margin-bottom: 8px; font-size: 0.9em; }
+        #marketplace-log li .timestamp { font-size: 0.8em; color: #777; display: block; }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Symbiotic City: The Urban Metabolism Platform</h1>
+    <p>A real-time marketplace turning urban waste into urban wealth.</p>
+</header>
+
+<main>
+    <div id="map"></div>
+    <div id="control-panel">
+        <div id="impact-dashboard" class="panel-section">
+            <h3>Real-Time Impact</h3>
+            <div class="metric">
+                <h4>CO₂ Emissions Averted (kg)</h4>
+                <p id="co2-metric">0</p>
+            </div>
+            <div class="metric">
+                <h4>Energy Recycled (kWh)</h4>
+                <p id="energy-metric">0</p>
+            </div>
+            <div class="metric">
+                <h4>Water Reused (Liters)</h4>
+                <p id="water-metric">0</p>
+            </div>
+        </div>
+        <div id="marketplace-log" class="panel-section">
+            <h3>Marketplace Transactions</h3>
+            <ul id="log-list">
+                <!-- Transactions will be logged here -->
+            </ul>
+        </div>
+    </div>
+</main>
+
+<!-- LeafletJS for the map -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    // --- MAP INITIALIZATION ---
+    const map = L.map('map').setView([40.7128, -74.0060], 14); // Centered on NYC for demo
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(map);
+
+    // --- ICONS ---
+    const producerIcon = L.icon({ iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+    const consumerIcon = L.icon({ iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+    const matchedIcon = L.icon({ iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+
+    // --- SIMULATION DATA (Producers & Consumers) ---
+    const entities = [
+        { id: 1, name: 'Metro Data Center', type: 'producer', resource: 'heat', amount: 500, unit: 'kWh', lat: 40.715, lng: -74.008, matched: false },
+        { id: 2, name: 'Urban Farms Greenhouse', type: 'consumer', resource: 'heat', amount: 450, unit: 'kWh', lat: 40.716, lng: -74.005, matched: false },
+        { id: 3, name: 'GigaWatt Power Plant', type: 'producer', resource: 'co2', amount: 1000, unit: 'kg', lat: 40.705, lng: -74.012, matched: false },
+        { id: 4, name: 'Carbo-Crete Manufacturing', type: 'consumer', resource: 'co2', amount: 800, unit: 'kg', lat: 40.706, lng: -74.010, matched: false },
+        { id: 5, name: 'City Brewery', type: 'producer', resource: 'water', amount: 2000, unit: 'L', lat: 40.720, lng: -73.998, matched: false },
+        { id: 6, name: 'Hydro Algae Farm', type: 'consumer', resource: 'water', amount: 1800, unit: 'L', lat: 40.721, lng: -73.996, matched: false },
+    ];
+    
+    let markers = {};
+
+    // --- DRAW ENTITIES ON MAP ---
+    entities.forEach(entity => {
+        const icon = entity.type === 'producer' ? producerIcon : consumerIcon;
+        const marker = L.marker([entity.lat, entity.lng], { icon: icon }).addTo(map);
+        marker.bindPopup(`<b>${entity.name}</b><br>${entity.type.toUpperCase()}<br>Resource: ${entity.resource} (${entity.amount} ${entity.unit})`);
+        markers[entity.id] = marker;
+    });
+
+    // --- "AI" MATCHMAKING & SIMULATION ENGINE ---
+    const co2Metric = document.getElementById('co2-metric');
+    const energyMetric = document.getElementById('energy-metric');
+    const waterMetric = document.getElementById('water-metric');
+    const logList = document.getElementById('log-list');
+
+    function runSimulation() {
+        // Find an unmatched producer
+        const producer = entities.find(p => p.type === 'producer' && !p.matched);
+        if (!producer) return; // No more producers to match
+
+        // Find a suitable unmatched consumer
+        const consumer = entities.find(c => c.type === 'consumer' && !c.matched && c.resource === producer.resource);
+        if (!consumer) return; // No suitable consumer found for this producer
+
+        // --- MATCH FOUND! ---
+        producer.matched = true;
+        consumer.matched = true;
+        
+        // Log the transaction
+        const logItem = document.createElement('li');
+        const timestamp = new Date().toLocaleTimeString();
+        logItem.innerHTML = `✅ Match Made! <b>${producer.name}</b> &rarr; <b>${consumer.name}</b> (${producer.amount} ${producer.unit} of ${producer.resource}) <span class="timestamp">${timestamp}</span>`;
+        logList.prepend(logItem);
+
+        // Update impact dashboard
+        switch(producer.resource) {
+            case 'co2':
+                co2Metric.textContent = parseInt(co2Metric.textContent) + producer.amount;
+                break;
+            case 'heat':
+                energyMetric.textContent = parseInt(energyMetric.textContent) + producer.amount;
+                break;
+            case 'water':
+                waterMetric.textContent = parseInt(waterMetric.textContent) + producer.amount;
+                break;
+        }
+
+        // Update map markers
+        markers[producer.id].setIcon(matchedIcon);
+        markers[consumer.id].setIcon(matchedIcon);
+
+        // Draw a line to visualize the connection
+        L.polyline([[producer.lat, producer.lng], [consumer.lat, consumer.lng]], {color: '#4CAF50', weight: 3, opacity: 0.7}).addTo(map);
+    }
+
+    // Run the simulation every 3 seconds
+    setInterval(runSimulation, 3000);
+</script>
+
+</body>
+</html>
